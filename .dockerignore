@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+.next
+.vinext
+.wrangler
+.wrangler-auth
+outputs
+work
+*.zip
+.env*
+*.log
+npm-debug.log*
+pnpm-debug.log*
