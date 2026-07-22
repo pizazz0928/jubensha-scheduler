@@ -31,7 +31,12 @@ export async function POST(request: Request) {
     if (!body.kind || !body.payload) return Response.json({ error: "操作类型和内容不能为空" }, { status: 400 });
     const db = await ensureTables();
     const now = new Date();
-    const time = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+    const time = now.toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Shanghai",
+    });
     const title = String(body.payload.title || "目标场次");
     const dm = String(body.payload.dm || "乔木");
     const content = body.kind === "create" ? `创建临时场次《${title}》` : `将 ${dm} 安排到指定场次`;

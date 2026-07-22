@@ -8,3 +8,6 @@ onlyBuiltDependencies:
   - sharp
   - unrs-resolver
   - workerd
+overrides:
+  postcss: 8.5.10
+  sharp: 0.35.0
