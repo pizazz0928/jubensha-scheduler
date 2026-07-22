@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:22.21.1-bookworm-slim
 
 WORKDIR /app
 
@@ -8,13 +8,21 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+RUN mkdir -p /data/wrangler-state /tmp/wrangler-config \
+    && chown -R node:node /app /data /tmp/wrangler-config
+
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV XDG_CONFIG_HOME=/data/config
-ENV WRANGLER_LOG_PATH=/data/wrangler.log
+ENV XDG_CONFIG_HOME=/tmp/wrangler-config
+ENV WRANGLER_LOG_PATH=/tmp/wrangler.log
+ENV LOCAL_D1_DIR=/data/wrangler-state
+ENV WRANGLER_SEND_METRICS=false
 
 EXPOSE 3000
 
-VOLUME ["/data"]
+USER node
 
-CMD ["sh", "-c", "node node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --ip 0.0.0.0 --port ${PORT:-3000} --persist-to /data/wrangler-state --log-level warn --show-interactive-dev-session=false"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+CMD ["node", "scripts/start-cloud-run.mjs"]

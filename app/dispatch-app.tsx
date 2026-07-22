@@ -6,6 +6,9 @@ import type { DmRecord, RoomRecord, ScriptRecord, SkillRecord } from "./types";
 
 type SessionStatus = "进行中" | "准备中" | "等待到店" | "缺DM" | "缺玩家" | "待确认";
 type Session = { id: number; time: string; end: string; title: string; type: string; room: string; dm: string; players: number; target: number; fillers: string[]; status: SessionStatus; risk?: string; progress?: number; handoffs?: number };
+type CatalogResponse = { dms?: DmRecord[]; scripts?: ScriptRecord[]; rooms?: RoomRecord[]; skills?: SkillRecord[] };
+type DispatchResponse = { logs?: string[][] };
+type ApiResult = { error?: string };
 
 const sessionsSeed: Session[] = [
   { id: 1, time: "14:00", end: "18:30", title: "年轮", type: "情感 · 6人", room: "云间", dm: "阿衡", players: 6, target: 6, fillers: [], status: "进行中", progress: 58 },
@@ -42,9 +45,9 @@ export default function DispatchApp() {
   const [logs, setLogs] = useState<string[][]>(logsSeed);
 
   async function loadCatalog() {
-    try { const response=await fetch("/api/catalog"); if(!response.ok) return; const data=await response.json(); setDms(data.dms); setScripts(data.scripts); setRooms(data.rooms); setSkills(data.skills); } catch { /* 演示数据仍可使用 */ }
+    try { const response=await fetch("/api/catalog"); if(!response.ok) return; const data=await response.json() as CatalogResponse; if(data.dms) setDms(data.dms); if(data.scripts) setScripts(data.scripts); if(data.rooms) setRooms(data.rooms); if(data.skills) setSkills(data.skills); } catch { /* 演示数据仍可使用 */ }
   }
-  useEffect(() => { void loadCatalog(); fetch("/api/dispatch").then(r=>r.ok?r.json():null).then(data=>{ if(data?.logs?.length) setLogs(data.logs); }).catch(()=>undefined); }, []);
+  useEffect(() => { void Promise.resolve().then(loadCatalog); fetch("/api/dispatch").then(async r=>r.ok?await r.json() as DispatchResponse:null).then(data=>{ if(data?.logs?.length) setLogs(data.logs); }).catch(()=>undefined); }, []);
   function notice(message:string){ setToast(message); window.setTimeout(()=>setToast(""),2400); }
   function persist(kind:string,payload:unknown){ fetch("/api/dispatch",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind,payload})}).catch(()=>undefined); }
 
@@ -52,7 +55,7 @@ export default function DispatchApp() {
     const list=resource==="dm"?dms:resource==="script"?scripts:rooms;
     const action=entity.id && list.some(item=>item.id===entity.id)?"update":"create";
     const response=await fetch("/api/catalog",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({resource,action,entity})});
-    const result=await response.json(); if(!response.ok){ notice(result.error||"保存失败"); throw new Error(result.error||"保存失败"); } await loadCatalog();
+    const result=await response.json() as ApiResult; if(!response.ok){ notice(result.error||"保存失败"); throw new Error(result.error||"保存失败"); } await loadCatalog();
   }
   async function saveSkill(entity:Record<string,unknown>){ const response=await fetch("/api/catalog",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({resource:"skill",action:"upsert",entity})}); if(!response.ok){ notice("熟练度保存失败"); throw new Error("熟练度保存失败"); } await loadCatalog(); }
 

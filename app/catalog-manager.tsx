@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { DmRecord, DmStatus, RoomRecord, ScriptRecord, SkillRecord } from "./types";
 
 type Resource = "dm" | "script" | "room";
@@ -69,7 +69,8 @@ function DmEditor({ value, onClose, onSave }: { value: DmRecord | null; onClose:
 }
 
 function ScriptEditor({ value, dms, skills, onClose, onSave }: { value: ScriptRecord | null; dms: DmRecord[]; skills: SkillRecord[]; onClose: () => void; onSave: (entity: Record<string, unknown>, skills: Record<string, unknown>[]) => Promise<void> }) {
-  const draftId = value?.id || `script-${Date.now()}`;
+  const generatedId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const draftId = value?.id || `script-${generatedId}`;
   function submit(form: FormData) {
     const entity = { ...value, id: draftId, name: form.get("name"), category: form.get("category"), minPlayers: Number(form.get("minPlayers")), standardPlayers: Number(form.get("standardPlayers")), maxPlayers: Number(form.get("maxPlayers")), durationMinutes: Number(form.get("durationMinutes")), prepMinutes: Number(form.get("prepMinutes")), reviewMinutes: Number(form.get("reviewMinutes")), allowDmFill: form.get("allowDmFill") === "on", maxDmFill: Number(form.get("maxDmFill")), minProficiency: Number(form.get("minProficiency")), requiredGender: form.get("requiredGender"), requiredStyle: form.get("requiredStyle"), roomRequirement: form.get("roomRequirement"), difficulty: form.get("difficulty"), notes: form.get("notes"), enabled: value?.enabled ?? true };
     const assignments = dms.filter(dm => form.get(`dm-${dm.id}`) === "on").map(dm => ({ dmId: dm.id, scriptId: draftId, proficiency: Number(form.get(`prof-${dm.id}`) || 3), willing: true }));
