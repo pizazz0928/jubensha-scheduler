@@ -10,6 +10,9 @@ test("云托管容器使用动态端口、健康检查和非 root 用户", async
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/healthz/);
   assert.match(dockerfile, /USER node/);
   assert.match(dockerfile, /LOCAL_STORE_PATH=\/data\/scheduler-state\.json/);
+  assert.match(dockerfile, /pnpm install --frozen-lockfile/);
+  assert.match(dockerfile, /RUN pnpm build/);
+  assert.doesNotMatch(dockerfile, /npm ci/);
   assert.match(dockerfile, /CMD \["node", "scripts\/start-cloud-run\.mjs"\]/);
   assert.doesNotMatch(dockerfile, /VOLUME\s+\[?"?\/data/);
 });
