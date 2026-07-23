@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -22,6 +22,7 @@ test("本地持久层可以重启恢复且拒绝过期版本写入", async () =>
   process.env.LOCAL_STORE_PATH = path.join(directory, "state.json");
   try {
     const store = await createFileStore();
+    await assert.doesNotReject(store.health());
     const initial = await store.snapshot();
     const first = await store.mutate(initial.version, draft => {
       draft.catalog.rooms[0].notes = "已完成持久化测试";
@@ -36,12 +37,15 @@ test("本地持久层可以重启恢复且拒绝过期版本写入", async () =>
     await store.close();
 
     const reopened = await createFileStore();
+    await assert.doesNotReject(reopened.health());
     const recovered = await reopened.snapshot();
     assert.equal(recovered.catalog.rooms[0].notes, "已完成持久化测试");
     assert.equal(recovered.version, first.version);
     await reopened.close();
     assert.doesNotThrow(() => JSON.parse(recovered ? JSON.stringify(recovered) : ""));
     await assert.doesNotReject(readFile(process.env.LOCAL_STORE_PATH, "utf8"));
+    await writeFile(process.env.LOCAL_STORE_PATH, "{invalid", "utf8");
+    await assert.rejects(reopened.health());
   } finally {
     if (previousPath === undefined) delete process.env.LOCAL_STORE_PATH;
     else process.env.LOCAL_STORE_PATH = previousPath;

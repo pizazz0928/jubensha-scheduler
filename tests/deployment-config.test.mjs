@@ -23,6 +23,9 @@ test("云启动脚本读取 PORT 并将终止信号传给子进程", async () =>
   assert.match(script, /process\.once\("SIGTERM"/);
   assert.match(script, /--persist-to/);
   assert.match(script, /\/api\/shared\//);
+  assert.match(script, /await store\.health\(\)/);
+  assert.match(script, /storage health check failed/);
+  assert.match(script, /sendJson\(response, 503/);
   assert.match(script, /content-security-policy/);
 });
 
