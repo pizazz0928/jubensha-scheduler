@@ -18,35 +18,41 @@
 
 ```text
 NODE_ENV=production
-AUTH_MODE=cloudbase
+AUTH_MODE=password
 REQUIRE_MYSQL=true
 DB_HOST=你的 MySQL 内网地址
 DB_PORT=3306
 DB_USER=你的数据库账号
 DB_PASSWORD=你的数据库密码
 DB_NAME=你的数据库名称
+SESSION_SECRET=至少32个字符的随机字符串
+APP_USERS_JSON=门店账号配置
 ```
 
-请勿把数据库密码提交到 GitHub。
+请勿把数据库密码、会话密钥或员工账号配置提交到 GitHub。
 
 ## 三、配置登录和角色
 
-1. 在 CloudBase 身份认证中开启计划使用的登录方式。
-2. 在 HTTP 访问服务中启用身份验证。
-3. 确认登录请求会向容器注入 `x-cloudbase-context`。
-4. 完成一次登录并取得用户 UID。
-5. 把 UID 放入对应环境变量。
+1. 在自己的电脑进入项目目录。
+2. 运行 `pnpm auth:secret`，把输出填入 `SESSION_SECRET`。
+3. 为每位员工运行一次 `pnpm auth:hash`。
+4. 在终端输入员工密码，复制输出的密码哈希。
+5. 根据员工权限生成 `APP_USERS_JSON`。
+6. 在腾讯云 HTTP 访问服务中关闭身份验证，让系统自己的登录页处理员工登录。
+7. 保持服务全程使用 HTTPS。
 
 示例：
 
-```text
-CLOUDBASE_ADMIN_UIDS=管理员UID
-CLOUDBASE_MANAGER_UIDS=店长UID1,店长UID2
-CLOUDBASE_FRONTDESK_UIDS=前台UID1,前台UID2
-CLOUDBASE_DM_UID_MAP={"DM用户UID1":"dm-aheng","DM用户UID2":"dm-nanzhi"}
+```json
+[
+  {"username":"admin","passwordHash":"生成的哈希","displayName":"管理员","role":"admin"},
+  {"username":"manager01","passwordHash":"生成的哈希","displayName":"晚班店长","role":"manager"},
+  {"username":"frontdesk01","passwordHash":"生成的哈希","displayName":"前台","role":"frontdesk"},
+  {"username":"dm01","passwordHash":"生成的哈希","displayName":"阿衡","role":"dm","dmId":"dm-aheng"}
+]
 ```
 
-正式网址应使用启用了身份验证的网关域名。容器直连地址应关闭公开访问，或限制为仅接受网关流量。
+把整段 JSON 压缩成一行后填入 `APP_USERS_JSON`。至少保留一个 `admin` 账号。DM 账号的 `dmId` 要与系统 DM 资料中的编号一致。
 
 ## 四、部署 GitHub 主分支
 
@@ -63,7 +69,7 @@ CLOUDBASE_DM_UID_MAP={"DM用户UID1":"dm-aheng","DM用户UID2":"dm-nanzhi"}
 ```text
 "message":"cloud service ready"
 "storage":"mysql"
-"auth":"cloudbase"
+"auth":"password"
 ```
 
 ## 五、上线验收
@@ -82,11 +88,13 @@ CLOUDBASE_DM_UID_MAP={"DM用户UID1":"dm-aheng","DM用户UID2":"dm-nanzhi"}
 10. DM 账号只能看到自己的场次。
 11. 导出 CSV 操作记录。
 12. 重启服务，确认数据仍然存在。
+13. 连续输入错误密码达到限制后，系统会暂时拒绝继续尝试。
 
 ## 六、上线后维护
 
 - 每周检查数据库自动备份是否成功。
 - 每月导出一次操作记录。
-- 员工离职后立即从角色 UID 环境变量中移除。
+- 员工离职后立即从 `APP_USERS_JSON` 中移除该账号并重新部署。
+- 每三个月更换管理员密码和 `SESSION_SECRET`。
 - 每次更新代码后检查 `/healthz`，再执行一次临时开本和换 DM。
 - 数据库连接失败时保留 `REQUIRE_MYSQL=true`，先修复连接，避免服务回退到临时文件。

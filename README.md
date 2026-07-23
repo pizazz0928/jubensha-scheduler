@@ -10,7 +10,7 @@
 - 自定义 DM、剧本、熟练度、房间容量、房态和支持类型
 - MySQL 云端持久化与本地文件演示模式
 - 乐观版本锁与 MySQL 行锁，避免并发重复占用
-- CloudBase 身份上下文与管理员、店长、前台、DM 四级权限
+- 门店账号密码登录、CloudBase 可选登录与管理员、店长、前台、DM 四级权限
 - 中文桌面界面、手机浏览器适配、CSV 操作记录导出
 - 动态端口、健康检查、非 root 容器和安全响应头
 
@@ -69,24 +69,37 @@ pnpm start:cloud
 
 ```text
 NODE_ENV=production
-AUTH_MODE=cloudbase
+AUTH_MODE=password
 REQUIRE_MYSQL=true
 DB_HOST=MySQL 内网地址
 DB_PORT=3306
 DB_USER=数据库账号
 DB_PASSWORD=数据库密码
 DB_NAME=数据库名称
-CLOUDBASE_ADMIN_UIDS=管理员 UID
-CLOUDBASE_MANAGER_UIDS=店长 UID
-CLOUDBASE_FRONTDESK_UIDS=前台 UID
-CLOUDBASE_DM_UID_MAP={"DM账号UID":"dm-aheng"}
+SESSION_SECRET=至少32个字符的随机字符串
+APP_USERS_JSON=[{"username":"admin","passwordHash":"生成的密码哈希","displayName":"店长","role":"admin"}]
 ```
 
 也可以使用 `CONNECTION_URI` 代替五个 `DB_` 变量。
 
 数据库表会在首次启动时自动创建。`REQUIRE_MYSQL=true` 会让缺少数据库配置的容器直接停止，防止正式环境误用临时文件。
 
-生产环境默认要求 CloudBase 登录。HTTP 访问服务需要开启身份验证，并确保服务只通过会注入 `x-cloudbase-context` 的 CloudBase 网关访问。请勿公开绕过网关的容器直连地址。
+运行 `pnpm auth:secret` 可以生成 `SESSION_SECRET`。生成密码哈希时运行 `pnpm auth:hash`，终端输入过程不会显示密码。每位员工可以配置独立账号，密码哈希和会话密钥只放在腾讯云环境变量中。
+
+`APP_USERS_JSON` 支持四种角色：
+
+```json
+[
+  {"username":"admin","passwordHash":"生成的哈希","displayName":"管理员","role":"admin"},
+  {"username":"manager01","passwordHash":"生成的哈希","displayName":"晚班店长","role":"manager"},
+  {"username":"frontdesk01","passwordHash":"生成的哈希","displayName":"前台","role":"frontdesk"},
+  {"username":"dm01","passwordHash":"生成的哈希","displayName":"阿衡","role":"dm","dmId":"dm-aheng"}
+]
+```
+
+账号密码模式使用 HttpOnly、Secure、SameSite 严格会话 Cookie，并对连续登录失败进行限速。腾讯云 HTTP 访问服务的身份验证开关保持关闭，让应用自己的登录页接收请求。
+
+需要接入 CloudBase 用户体系时，可以把 `AUTH_MODE` 改为 `cloudbase`，并配置 `CLOUDBASE_ADMIN_UIDS`、`CLOUDBASE_MANAGER_UIDS`、`CLOUDBASE_FRONTDESK_UIDS` 和 `CLOUDBASE_DM_UID_MAP`。
 
 完整控制台操作见 [腾讯云正式上线清单](docs/TENCENT_LAUNCH.md)。
 
@@ -99,11 +112,13 @@ CLOUDBASE_DM_UID_MAP={"DM账号UID":"dm-aheng"}
 | 前台 | 可以 | 只读 | 手机号脱敏后的门店数据 |
 | DM | 只读 | 只读 | 自己的场次、技能和资料 |
 
-未列入管理员、店长或前台 UID 名单的已登录账号会进入 DM 角色。DM 账号需要在 `CLOUDBASE_DM_UID_MAP` 中关联 DM 编号。
+账号密码模式中的 DM 账号需要填写 `dmId`。CloudBase 模式下，未列入管理员、店长或前台 UID 名单的已登录账号会进入 DM 角色，并通过 `CLOUDBASE_DM_UID_MAP` 关联 DM 编号。
 
 ## 共享数据接口
 
 - `GET /api/shared/snapshot` 获取当前账号可见的数据和版本号
+- `POST /api/shared/login` 登录门店账号
+- `POST /api/shared/logout` 退出门店账号
 - `POST /api/shared/catalog` 保存 DM、剧本、房间和熟练度
 - `POST /api/shared/dispatch` 创建场次、安排 DM、调整和关闭场次
 - `GET /api/shared/me` 获取当前账号角色
