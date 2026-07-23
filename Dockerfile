@@ -2,11 +2,13 @@ FROM node:22.21.1-bookworm-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable \
+    && corepack prepare pnpm@11.9.0 --activate \
+    && pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm build
 
 RUN mkdir -p /data/wrangler-state /tmp/wrangler-config \
     && chown -R node:node /app /data /tmp/wrangler-config

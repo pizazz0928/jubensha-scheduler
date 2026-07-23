@@ -1,13 +1,8 @@
 allowBuilds:
-  esbuild: set this to true or false
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-  workerd: set this to true or false
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
-  - unrs-resolver
-  - workerd
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  workerd: true
 overrides:
   esbuild: 0.28.1
   postcss: 8.5.22
