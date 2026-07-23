@@ -3,7 +3,13 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getViewer } from "../server/auth.mjs";
+import {
+  authenticatePassword,
+  createSessionCookie,
+  getViewer,
+  hashPassword,
+  validateAuthConfiguration,
+} from "../server/auth.mjs";
 import { createSeedState } from "../server/seed-state.mjs";
 import { sharedApiInternals } from "../server/shared-api.mjs";
 import { createFileStore } from "../server/store.mjs";
@@ -125,6 +131,42 @@ test("生产环境缺少明确认证配置时默认拒绝访问", () => {
     else process.env.AUTH_MODE = previousMode;
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test("普通账号密码登录使用哈希和签名会话", () => {
+  const previous = {
+    mode: process.env.AUTH_MODE,
+    users: process.env.APP_USERS_JSON,
+    secret: process.env.SESSION_SECRET,
+    nodeEnv: process.env.NODE_ENV,
+  };
+  process.env.AUTH_MODE = "password";
+  process.env.NODE_ENV = "production";
+  process.env.SESSION_SECRET = "test-session-secret-with-more-than-32-characters";
+  process.env.APP_USERS_JSON = JSON.stringify([{
+    username: "manager01",
+    passwordHash: hashPassword("strong-test-password"),
+    displayName: "测试店长",
+    role: "admin",
+  }]);
+  try {
+    assert.doesNotThrow(() => validateAuthConfiguration());
+    const authenticated = authenticatePassword("manager01", "strong-test-password");
+    assert.equal(authenticated.role, "admin");
+    assert.equal(authenticatePassword("manager01", "wrong-password"), null);
+    const cookie = createSessionCookie(authenticated);
+    assert.match(cookie, /HttpOnly/);
+    assert.match(cookie, /SameSite=Strict/);
+    assert.match(cookie, /Secure/);
+    assert.equal(getViewer({ cookie }).displayName, "测试店长");
+    assert.equal(getViewer({ cookie: `${cookie.split(";")[0]}tampered` }), null);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      const name = key === "mode" ? "AUTH_MODE" : key === "users" ? "APP_USERS_JSON" : key === "secret" ? "SESSION_SECRET" : "NODE_ENV";
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   }
 });
 

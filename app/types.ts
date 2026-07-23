@@ -98,4 +98,5 @@ export type SharedSnapshotResponse = {
   snapshot: SharedSnapshot;
   viewer: ViewerRecord;
   storageMode: "file" | "mysql";
+  authMode: "demo" | "cloudbase" | "password";
 };

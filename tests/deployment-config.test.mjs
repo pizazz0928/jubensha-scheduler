@@ -26,10 +26,13 @@ test("云启动脚本读取 PORT 并将终止信号传给子进程", async () =>
   assert.match(script, /content-security-policy/);
 });
 
-test("正式环境示例强制 MySQL 和 CloudBase 登录", async () => {
+test("正式环境示例强制 MySQL 和普通账号密码登录", async () => {
   const example = await readFile(new URL(".env.example", root), "utf8");
+  assert.match(example, /AUTH_MODE=password/);
   assert.match(example, /AUTH_MODE=cloudbase/);
   assert.match(example, /REQUIRE_MYSQL=true/);
+  assert.match(example, /SESSION_SECRET/);
+  assert.match(example, /APP_USERS_JSON/);
   assert.match(example, /CLOUDBASE_ADMIN_UIDS/);
   assert.match(example, /CLOUDBASE_DM_UID_MAP/);
 });

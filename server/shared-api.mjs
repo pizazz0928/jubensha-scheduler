@@ -1,10 +1,21 @@
-import { canDispatch, canManageCatalog, getViewer } from "./auth.mjs";
+import {
+  authenticatePassword,
+  canDispatch,
+  canManageCatalog,
+  clearSessionCookie,
+  createSessionCookie,
+  getAuthMode,
+  getViewer,
+} from "./auth.mjs";
 
 const MAX_BODY_BYTES = 1024 * 1024;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 8;
 const allowedResources = new Set(["dm", "script", "room", "skill"]);
 const allowedActions = new Set(["create", "update", "toggle", "upsert"]);
+const loginFailures = new Map();
 
-function sendJson(response, status, payload) {
+function sendJson(response, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -12,8 +23,32 @@ function sendJson(response, status, payload) {
     "x-content-type-options": "nosniff",
     "referrer-policy": "same-origin",
     "content-length": Buffer.byteLength(body),
+    ...extraHeaders,
   });
   response.end(body);
+}
+
+function requestAddress(headers) {
+  const forwarded = String(headers["x-forwarded-for"] ?? "").split(",")[0].trim();
+  return forwarded || String(headers["x-real-ip"] ?? "unknown");
+}
+
+function loginStatus(headers) {
+  const key = requestAddress(headers);
+  const now = Date.now();
+  const current = loginFailures.get(key);
+  if (!current || now - current.startedAt > LOGIN_WINDOW_MS) {
+    loginFailures.delete(key);
+    return { key, blocked: false };
+  }
+  return { key, blocked: current.failures >= LOGIN_MAX_FAILURES };
+}
+
+function recordLoginFailure(key) {
+  const current = loginFailures.get(key);
+  loginFailures.set(key, current
+    ? { ...current, failures: current.failures + 1 }
+    : { failures: 1, startedAt: Date.now() });
 }
 
 export const sharedApiInternals = {
@@ -381,16 +416,49 @@ function publicState(state, viewer, storeMode) {
     result.catalog.scripts = result.catalog.scripts.filter((script) => ownScriptIds.has(script.id));
     result.logs = [];
   }
-  return { snapshot: result, viewer, storageMode: storeMode };
+  return { snapshot: result, viewer, storageMode: storeMode, authMode: getAuthMode() };
 }
 
 export async function handleSharedApi(request, response, store) {
-  const viewer = getViewer(request.headers);
-  if (!viewer) {
-    sendJson(response, 401, { error: "请先登录后再访问排班系统" });
+  const url = new URL(request.url, "http://localhost");
+  if (request.method === "GET" && url.pathname === "/api/shared/auth") {
+    sendJson(response, 200, { authMode: getAuthMode() });
     return;
   }
-  const url = new URL(request.url, "http://localhost");
+  if (request.method === "POST" && url.pathname === "/api/shared/logout") {
+    sendJson(response, 200, { ok: true, authMode: getAuthMode() }, { "set-cookie": clearSessionCookie() });
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/api/shared/login") {
+    if (getAuthMode() !== "password") {
+      sendJson(response, 400, { error: "当前环境未启用账号密码登录", authMode: getAuthMode() });
+      return;
+    }
+    const status = loginStatus(request.headers);
+    if (status.blocked) {
+      sendJson(response, 429, { error: "登录失败次数过多，请 15 分钟后再试", authMode: "password" });
+      return;
+    }
+    try {
+      const body = await readJson(request);
+      const viewer = authenticatePassword(body.username, body.password);
+      if (!viewer) {
+        recordLoginFailure(status.key);
+        sendJson(response, 401, { error: "账号或密码错误", authMode: "password" });
+        return;
+      }
+      loginFailures.delete(status.key);
+      sendJson(response, 200, { ok: true, viewer, authMode: "password" }, { "set-cookie": createSessionCookie(viewer) });
+    } catch (error) {
+      sendJson(response, Number(error?.status ?? 400), { error: error instanceof Error ? error.message : "登录请求无效", authMode: "password" });
+    }
+    return;
+  }
+  const viewer = getViewer(request.headers);
+  if (!viewer) {
+    sendJson(response, 401, { error: "请先登录后再访问排班系统", authMode: getAuthMode() });
+    return;
+  }
   try {
     if (request.method === "GET" && (url.pathname === "/api/shared/me" || url.pathname === "/api/shared/snapshot")) {
       const state = await store.snapshot();

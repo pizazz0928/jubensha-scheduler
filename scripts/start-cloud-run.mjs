@@ -5,6 +5,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { handleSharedApi } from "../server/shared-api.mjs";
+import { validateAuthConfiguration } from "../server/auth.mjs";
 import { createStore } from "../server/store.mjs";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -15,6 +16,7 @@ const stateDirectory = path.resolve(process.env.LOCAL_D1_DIR ?? path.join(projec
 const configDirectory = path.resolve(process.env.XDG_CONFIG_HOME ?? path.join(projectRoot, ".wrangler", "config"));
 
 await Promise.all([mkdir(stateDirectory, { recursive: true }), mkdir(configDirectory, { recursive: true })]);
+validateAuthConfiguration();
 const store = await createStore();
 
 const wranglerCli = path.join(projectRoot, "node_modules", "wrangler", "bin", "wrangler.js");

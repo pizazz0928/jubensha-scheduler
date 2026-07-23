@@ -65,16 +65,35 @@ jobs:
         run: docker build --tag jubensha-scheduler:ci .
 
       - name: Start production container
-        run: docker run --detach --name jubensha-ci --publish 3000:3000 --env AUTH_MODE=demo --env PORT=3000 jubensha-scheduler:ci
+        run: |
+          docker run --detach --name jubensha-ci --publish 3000:3000 \
+            --env AUTH_MODE=password \
+            --env PORT=3000 \
+            --env SESSION_SECRET=ci-session-secret-with-more-than-32-characters \
+            --env 'APP_USERS_JSON=[{"username":"admin","passwordHash":"scrypt$16384$8$1$ci-fixed-salt-for-container-smoke$iUv1tGm5IF4jmCEd3rY58ZymPZ4KXOOnQ6xTu0uSW-27M1pHt-DaGBNI4s-jnVkFg_z928Y5UyJqXqWFdHkZxA","displayName":"CI Admin","role":"admin"}]' \
+            jubensha-scheduler:ci
 
       - name: Verify container health and shared API
         run: |
           for attempt in {1..60}; do
             if curl --fail --silent --show-error http://127.0.0.1:3000/healthz > health.json; then
               curl --fail --silent --show-error http://127.0.0.1:3000/ > home.html
-              curl --fail --silent --show-error http://127.0.0.1:3000/api/shared/snapshot > snapshot.json
+              status=$(curl --silent --output unauthorized.json --write-out '%{http_code}' http://127.0.0.1:3000/api/shared/snapshot)
+              test "$status" = "401"
+              curl --fail --silent --show-error --dump-header login.headers \
+                --header 'Content-Type: application/json' \
+                --data '{"username":"admin","password":"ci-password-1234"}' \
+                http://127.0.0.1:3000/api/shared/login > login.json
+              cookie=$(awk 'tolower($1) == "set-cookie:" {print $2}' login.headers | tr -d '\r' | cut -d';' -f1)
+              test -n "$cookie"
+              grep --ignore-case --quiet 'httponly' login.headers
+              grep --ignore-case --quiet 'samesite=strict' login.headers
+              curl --fail --silent --show-error --header "Cookie: $cookie" \
+                http://127.0.0.1:3000/api/shared/snapshot > snapshot.json
               grep --quiet '"ok":true' health.json
               grep --quiet '"storageMode":"file"' snapshot.json
+              grep --quiet '"authMode":"password"' snapshot.json
+              grep --quiet '"role":"admin"' snapshot.json
               exit 0
             fi
             sleep 1

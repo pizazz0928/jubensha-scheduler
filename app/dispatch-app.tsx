@@ -7,7 +7,7 @@ import type { DmRecord, RoomRecord, ScriptRecord, SessionRecord, SessionStatus, 
 type Session = SessionRecord;
 type CatalogResponse = { dms?: DmRecord[]; scripts?: ScriptRecord[]; rooms?: RoomRecord[]; skills?: SkillRecord[] };
 type DispatchResponse = { logs?: string[][] };
-type ApiResult = { error?: string };
+type ApiResult = { error?: string; authMode?: "demo" | "cloudbase" | "password" };
 
 const sessionsSeed: Session[] = [
   { id: 1, time: "14:00", end: "18:30", title: "年轮", type: "情感 · 6人", room: "云间", dm: "阿衡", players: 6, target: 6, fillers: [], status: "进行中", progress: 58 },
@@ -47,7 +47,10 @@ export default function DispatchApp() {
   const versionRef = useRef(0);
   const [viewer, setViewer] = useState<ViewerRecord>({ uid: "demo-admin", displayName: "演示店长", role: "admin", roleLabel: "管理员" });
   const [storageMode, setStorageMode] = useState<"file"|"mysql">("file");
+  const [authMode, setAuthMode] = useState<"demo"|"cloudbase"|"password">("demo");
   const [authRequired, setAuthRequired] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
   const [syncing, setSyncing] = useState(true);
   const [sessionFilter, setSessionFilter] = useState<"all"|"running"|"risk">("all");
 
@@ -62,7 +65,9 @@ export default function DispatchApp() {
     setVersion(data.snapshot.version);
     setViewer(data.viewer);
     setStorageMode(data.storageMode);
+    setAuthMode(data.authMode);
     setAuthRequired(false);
+    setLoginError("");
   },[]);
 
   const loadLegacyData=useCallback(async () => {
@@ -73,7 +78,12 @@ export default function DispatchApp() {
   const loadSnapshot=useCallback(async () => {
     try {
       const response=await fetch("/api/shared/snapshot",{cache:"no-store"});
-      if(response.status===401){ setAuthRequired(true); return; }
+      if(response.status===401){
+        const result=await response.json() as ApiResult;
+        setAuthMode(result.authMode||"cloudbase");
+        setAuthRequired(true);
+        return;
+      }
       if(response.status===404){ await loadLegacyData(); return; }
       if(!response.ok) throw new Error("共享数据读取失败");
       applySnapshot(await response.json() as SharedSnapshotResponse);
@@ -88,12 +98,37 @@ export default function DispatchApp() {
   }, [loadSnapshot]);
   function notice(message:string){ setToast(message); window.setTimeout(()=>setToast(""),2400); }
 
+  async function login(form:FormData) {
+    setLoginBusy(true);
+    setLoginError("");
+    try {
+      const response=await fetch("/api/shared/login",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({username:String(form.get("username")||""),password:String(form.get("password")||"")}),
+      });
+      const result=await response.json() as ApiResult;
+      if(!response.ok) throw new Error(result.error||"登录失败");
+      await loadSnapshot();
+    } catch(error) {
+      setLoginError(error instanceof Error?error.message:"登录失败");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/shared/logout",{method:"POST"});
+    setAuthRequired(true);
+    setLoginError("");
+  }
+
   async function postShared(path:string,body:Record<string,unknown>) {
     setSyncing(true);
     try {
       const response=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...body,expectedVersion:versionRef.current})});
       const result=await response.json() as SharedSnapshotResponse&ApiResult;
-      if(response.status===401){ setAuthRequired(true); throw new Error(result.error||"请先登录"); }
+      if(response.status===401){ setAuthMode(result.authMode||authMode); setAuthRequired(true); throw new Error(result.error||"请先登录"); }
       if(response.status===409){ await loadSnapshot(); throw new Error(`${result.error||"数据已更新"}，已同步最新状态，请重试`); }
       if(!response.ok) throw new Error(result.error||"操作失败");
       applySnapshot(result);
@@ -141,10 +176,10 @@ export default function DispatchApp() {
   const canDispatch=["admin","manager","frontdesk"].includes(viewer.role);
   const canManage=["admin","manager"].includes(viewer.role);
   const today=new Intl.DateTimeFormat("zh-CN",{month:"long",day:"numeric",weekday:"short"}).format(new Date());
-  if(authRequired) return <main className="auth-screen"><section><span className="brand-mark">归</span><h1>请先登录排班系统</h1><p>当前地址需要通过腾讯云登录入口访问。完成登录后刷新此页面。</p><button className="primary" onClick={()=>window.location.reload()}>刷新页面</button></section></main>;
+  if(authRequired) return <main className="auth-screen"><section><span className="brand-mark">归</span><h1>登录排班系统</h1>{authMode==="password"?<form action={login}><p>请使用店长分配的门店账号登录。</p><label><span>账号</span><input name="username" autoComplete="username" required minLength={3} maxLength={64}/></label><label><span>密码</span><input name="password" type="password" autoComplete="current-password" required minLength={10}/></label>{loginError&&<div className="login-error" role="alert">{loginError}</div>}<button className="primary" type="submit" disabled={loginBusy}>{loginBusy?"正在登录":"登录"}</button></form>:<><p>当前地址需要通过腾讯云登录入口访问。完成登录后刷新此页面。</p><button className="primary" onClick={()=>window.location.reload()}>刷新页面</button></>}</section></main>;
 
   return <main className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark">归</div><div><b>归来剧场</b><span>实时排班系统</span></div></div><nav>{nav.map(([name,symbol])=><button key={name} className={active===name?"active":""} onClick={()=>setActive(name)}><Icon>{symbol}</Icon>{name}{name==="今日调度"&&<em>{sessions.filter(s=>s.risk).length}</em>}</button>)}</nav><div className="sidebar-bottom"><button onClick={()=>setActive("记录统计")}><Icon>▤</Icon>操作记录</button><div className="support"><span>调度规则 v2.0</span><small>资料库已连接</small></div></div></aside>
-    <section className="workspace"><header className="topbar"><div><span className="eyebrow">实时运营中心</span><h1>{active}</h1></div><div className="top-actions"><span className={`sync-status ${syncing?"syncing":""}`}>{syncing?"同步中":storageMode==="mysql"?`云端已同步 · v${version}`:"本机数据模式"}</span><div className="today"><b>今天</b><span>{today}</span></div><span className="divider"/><button className="bell" aria-label="查看操作记录" onClick={()=>setActive("记录统计")}>♧<i>{Math.min(99,logs.length)}</i></button><div className="profile"><span>{viewer.displayName.slice(0,1)}</span><div><b>{viewer.displayName}</b><small>{viewer.roleLabel}</small></div><i>⌄</i></div></div></header>
+    <section className="workspace"><header className="topbar"><div><span className="eyebrow">实时运营中心</span><h1>{active}</h1></div><div className="top-actions"><span className={`sync-status ${syncing?"syncing":""}`}>{syncing?"同步中":storageMode==="mysql"?`云端已同步 · v${version}`:"本机数据模式"}</span><div className="today"><b>今天</b><span>{today}</span></div><span className="divider"/><button className="bell" aria-label="查看操作记录" onClick={()=>setActive("记录统计")}>♧<i>{Math.min(99,logs.length)}</i></button><div className="profile"><span>{viewer.displayName.slice(0,1)}</span><div><b>{viewer.displayName}</b><small>{viewer.roleLabel}</small></div>{authMode==="password"&&<button type="button" onClick={()=>void logout()}>退出</button>}</div></div></header>
     {(active==="今日调度"||active==="场次管理")?<><section className="stats-grid">{stats.map(([label,value,sub,icon,color])=><article className="stat-card" key={String(label)}><div><span>{label}</span><strong>{value}</strong><small className={label==="缺 DM"?"danger":""}>{sub}</small></div><div className="stat-icon" style={{color:String(color),background:`${color}12`}}><Icon>{icon}</Icon></div></article>)}</section>{!canDispatch&&<div className="permission-banner">当前账号可查看自己的安排，场次调整由店长或前台完成。</div>}{firstRisk&&<div className="critical-alert"><div className="alert-badge">!</div><div><b>{sessions.filter(session=>session.risk).length} 项风险需要处理</b><span>《{firstRisk.title}》{firstRisk.risk}</span></div><button onClick={()=>setSessionFilter("risk")}>查看风险场次</button></div>}<section className="dispatch-layout"><div className="schedule-panel"><div className="section-head"><div><h2>今日场次</h2><span>自定义 DM、剧本与房间已参与实时推荐</span></div><div className="filter-pills"><button className={sessionFilter==="all"?"selected":""} onClick={()=>setSessionFilter("all")}>全部 {sessions.length}</button><button className={sessionFilter==="running"?"selected":""} onClick={()=>setSessionFilter("running")}>进行中 {sessions.filter(s=>s.status==="进行中").length}</button><button className={sessionFilter==="risk"?"selected":""} onClick={()=>setSessionFilter("risk")}>待处理 {sessions.filter(s=>s.risk).length}</button></div></div><div className="timeline">{visibleSessions.map((session,index)=><SessionCard key={session.id} session={session} first={index===0} onSwap={()=>canDispatch?openAssign(session,"swap"):notice("当前账号没有调度权限")} onFill={()=>canDispatch?openAssign(session,"fill"):notice("当前账号没有调度权限")} onDetail={()=>{setSelectedSession(session);setModal("detail");}}/>)}</div></div><aside className="dm-panel"><div className="dm-head"><div><h2>DM 实时池</h2><span><i/> {dms.filter(d=>d.enabled&&d.inStore&&d.status==="空闲").length} 人可用</span></div><button onClick={()=>setActive("DM 状态")}>查看资料</button></div><div className="dm-list">{dms.filter(d=>d.enabled).slice(0,8).map(dm=><button className="dm-row" key={dm.id} onClick={()=>setActive("DM 状态")}><span className="avatar indigo">{dm.name.slice(0,1)}</span><div><div><b>{dm.name}</b><em className={`dm-status ${dm.status}`}>{dm.status}</em></div><span>{dm.specialties.join(" / ")||"待设置擅长类型"}</span><small>{dm.availableFrom} 至 {dm.availableUntil} · {dm.canFill?"可补位":"不补位"}</small></div><i>›</i></button>)}</div><button className="pool-action" onClick={()=>setActive("DM 状态")}>查看 DM 状态与技能</button></aside></section></>:active==="记录统计"?<LogsPage logs={logs} dms={dms}/>:<CatalogManager page={active} dms={dms} scripts={scripts} rooms={rooms} skills={skills} save={saveCatalog} saveSkill={saveSkill} notice={notice} canManage={canManage}/>}</section>
     {canDispatch&&<button className="quick-create" onClick={()=>setModal("create")}><span>＋</span> 临时开本</button>}{modal==="create"&&<CreateModal scripts={scripts.filter(x=>x.enabled)} rooms={rooms.filter(x=>x.enabled)} eligible={eligible} onClose={()=>setModal(null)} onCreate={createSession}/>} {modal==="assign"&&selectedSession&&<AssignModal session={selectedSession} mode={assignMode} candidates={eligible(scripts.find(s=>s.name===selectedSession.title),assignMode,selectedSession).filter(dm=>dm.name!==selectedSession.dm&&!selectedSession.fillers.includes(dm.name))} onClose={()=>setModal(null)} onConfirm={confirmAssign}/>} {modal==="detail"&&selectedSession&&<SessionDetailModal session={selectedSession} canDispatch={canDispatch} onClose={()=>setModal(null)} onChange={changeSession}/>} {toast&&<div className="toast"><span>✓</span>{toast}</div>}</main>;
 }
