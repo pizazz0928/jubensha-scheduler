@@ -122,7 +122,7 @@ APP_USERS_JSON=[{"username":"admin","passwordHash":"生成的密码哈希","disp
 - `POST /api/shared/catalog` 保存 DM、剧本、房间和熟练度
 - `POST /api/shared/dispatch` 创建场次、安排 DM、调整和关闭场次
 - `GET /api/shared/me` 获取当前账号角色
-- `GET /healthz` 获取服务和存储状态
+- `GET /healthz` 获取服务和存储状态。MySQL 连接故障时返回 `503`
 
 每次写操作都要带 `expectedVersion`。版本落后时接口返回 `409`，页面会刷新云端状态并提示重试。
 

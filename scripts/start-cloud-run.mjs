@@ -58,7 +58,17 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (pathname === "/healthz") {
-      sendJson(response, 200, { ok: true, service: "jubensha-scheduler", storage: store.mode });
+      try {
+        await store.health();
+        sendJson(response, 200, { ok: true, service: "jubensha-scheduler", storage: store.mode });
+      } catch (error) {
+        console.error(JSON.stringify({
+          message: "storage health check failed",
+          storage: store.mode,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+        sendJson(response, 503, { ok: false, service: "jubensha-scheduler", storage: store.mode });
+      }
       return;
     }
     await proxyToWorker(request, response, workerPort);

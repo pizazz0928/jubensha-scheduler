@@ -97,4 +97,5 @@ APP_USERS_JSON=门店账号配置
 - 员工离职后立即从 `APP_USERS_JSON` 中移除该账号并重新部署。
 - 每三个月更换管理员密码和 `SESSION_SECRET`。
 - 每次更新代码后检查 `/healthz`，再执行一次临时开本和换 DM。
+- `/healthz` 返回 `503` 时先检查 MySQL 网络、账号权限和实例状态。
 - 数据库连接失败时保留 `REQUIRE_MYSQL=true`，先修复连接，避免服务回退到临时文件。

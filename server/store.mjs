@@ -37,6 +37,10 @@ export async function createFileStore() {
 
   return {
     mode: "file",
+    async health() {
+      const state = await load();
+      if (!state || !Number.isFinite(Number(state.version))) throw new Error("本地数据文件格式无效");
+    },
     async snapshot() {
       await queue;
       return clone(await load());
@@ -91,6 +95,9 @@ export async function createMysqlStore() {
 
   return {
     mode: "mysql",
+    async health() {
+      await pool.query("SELECT 1");
+    },
     async snapshot() {
       const [rows] = await pool.execute("SELECT version, payload FROM scheduler_state WHERE id = 1");
       if (!rows[0]) throw new Error("共享数据库尚未初始化");
