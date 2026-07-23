@@ -16,6 +16,7 @@ ENV PORT=3000
 ENV XDG_CONFIG_HOME=/tmp/wrangler-config
 ENV WRANGLER_LOG_PATH=/tmp/wrangler.log
 ENV LOCAL_D1_DIR=/data/wrangler-state
+ENV LOCAL_STORE_PATH=/data/scheduler-state.json
 ENV WRANGLER_SEND_METRICS=false
 
 EXPOSE 3000

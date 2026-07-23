@@ -51,3 +51,51 @@ export type RoomRecord = {
 };
 
 export type SkillRecord = { id: string; dmId: string; scriptId: string; proficiency: number; priority: number; willing: boolean };
+
+export type SessionStatus = "进行中" | "准备中" | "等待到店" | "缺DM" | "缺玩家" | "待确认" | "暂停" | "已结束" | "已取消";
+
+export type SessionRecord = {
+  id: number;
+  time: string;
+  end: string;
+  title: string;
+  type: string;
+  room: string;
+  dm: string;
+  players: number;
+  target: number;
+  fillers: string[];
+  status: SessionStatus;
+  risk?: string;
+  progress?: number;
+  handoffs?: number;
+};
+
+export type StoreRole = "admin" | "manager" | "frontdesk" | "dm";
+
+export type ViewerRecord = {
+  uid: string;
+  displayName: string;
+  role: StoreRole;
+  roleLabel: string;
+  dmId?: string;
+};
+
+export type SharedSnapshot = {
+  schemaVersion: number;
+  version: number;
+  catalog: {
+    dms: DmRecord[];
+    scripts: ScriptRecord[];
+    rooms: RoomRecord[];
+    skills: SkillRecord[];
+  };
+  sessions: SessionRecord[];
+  logs: string[][];
+};
+
+export type SharedSnapshotResponse = {
+  snapshot: SharedSnapshot;
+  viewer: ViewerRecord;
+  storageMode: "file" | "mysql";
+};

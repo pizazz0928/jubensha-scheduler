@@ -13,12 +13,13 @@ type Props = {
   save: (resource: Resource, entity: Record<string, unknown>) => Promise<void>;
   saveSkill: (entity: Record<string, unknown>) => Promise<void>;
   notice: (message: string) => void;
+  canManage: boolean;
 };
 
 const dmStatuses: DmStatus[] = ["未到店", "空闲", "准备中", "主持中", "玩家补位中", "休息中", "暂时不可用", "已下班"];
 const categories = ["情感", "推理", "欢乐", "阵营", "恐怖", "机制", "城限", "还原"];
 
-export default function CatalogManager({ page, dms, scripts, rooms, skills, save, saveSkill, notice }: Props) {
+export default function CatalogManager({ page, dms, scripts, rooms, skills, save, saveSkill, notice, canManage }: Props) {
   const [query, setQuery] = useState("");
   const [showDisabled, setShowDisabled] = useState(false);
   const [editing, setEditing] = useState<DmRecord | ScriptRecord | RoomRecord | "new" | null>(null);
@@ -36,25 +37,26 @@ export default function CatalogManager({ page, dms, scripts, rooms, skills, save
   return <section className="content-page catalog-page">
     <div className="page-heading">
       <div><span>门店基础资料 · 已启用 {enabledCount}</span><h2>{page}</h2><p>{page === "DM 状态" ? "维护人员能力、到店状态、补位许可与可用时间。" : page === "剧本管理" ? "维护开本人数、时长、补位规则和 DM 熟练度。" : "维护容量、房态、清理状态和支持的剧本类型。"}</p></div>
-      <button className="primary" onClick={() => setEditing("new")}>＋ 新增{resource === "dm" ? " DM" : resource === "script" ? "剧本" : "房间"}</button>
+      <button className="primary" disabled={!canManage} onClick={() => setEditing("new")}>＋ 新增{resource === "dm" ? " DM" : resource === "script" ? "剧本" : "房间"}</button>
     </div>
+    {!canManage && <div className="permission-banner">当前账号拥有查看权限，基础资料修改由店长或管理员完成。</div>}
     <div className="catalog-toolbar"><label><span>⌕</span><input value={query} onChange={e => setQuery(e.target.value)} placeholder={`搜索${resource === "dm" ? "姓名、昵称或擅长类型" : resource === "script" ? "剧本名称或类型" : "房间名称或支持类型"}`} /></label><label className="switch-line"><input type="checkbox" checked={showDisabled} onChange={e => setShowDisabled(e.target.checked)}/><span>显示已停用</span></label></div>
 
     {page === "DM 状态" && <div className="dm-grid rich-grid">{filteredDms.map(dm => <article className={`dm-card ${!dm.enabled ? "disabled-card" : ""}`} key={dm.id}>
-      <div className="dm-card-top"><span className="avatar large indigo">{dm.name.slice(0, 1)}</span><div><h3>{dm.name}<small>{dm.nickname && ` · ${dm.nickname}`}</small></h3><em className={`dm-status ${dm.status}`}>{dm.status}</em></div><button onClick={() => setEditing(dm)}>编辑</button></div>
+      <div className="dm-card-top"><span className="avatar large indigo">{dm.name.slice(0, 1)}</span><div><h3>{dm.name}<small>{dm.nickname && ` · ${dm.nickname}`}</small></h3><em className={`dm-status ${dm.status}`}>{dm.status}</em></div><button disabled={!canManage} onClick={() => setEditing(dm)}>编辑</button></div>
       <div className="tag-row">{dm.specialties.map(tag => <em key={tag}>{tag}</em>)}{dm.styles.slice(0, 2).map(tag => <em className="soft" key={tag}>{tag}</em>)}</div>
-      <dl><div><dt>可用时间</dt><dd>{dm.availableFrom}–{dm.availableUntil}</dd></div><div><dt>权限</dt><dd>{dm.canHost ? "可主持" : "不可主持"} · {dm.canFill ? "可补位" : "不补位"}</dd></div><div><dt>到店状态</dt><dd>{dm.inStore ? "已到店" : "未到店"}</dd></div></dl>
-      <div className="card-control"><select value={dm.status} disabled={!dm.enabled} onChange={e => quickUpdate(dm, { status: e.target.value, inStore: !["未到店", "已下班"].includes(e.target.value) })}>{dmStatuses.map(status => <option key={status}>{status}</option>)}</select><button onClick={() => quickUpdate(dm, { enabled: !dm.enabled })}>{dm.enabled ? "停用" : "恢复"}</button></div>
+      <dl><div><dt>可用时间</dt><dd>{dm.availableFrom} 至 {dm.availableUntil}</dd></div><div><dt>权限</dt><dd>{dm.canHost ? "可主持" : "不可主持"} · {dm.canFill ? "可补位" : "不补位"}</dd></div><div><dt>到店状态</dt><dd>{dm.inStore ? "已到店" : "未到店"}</dd></div></dl>
+      <div className="card-control"><select value={dm.status} disabled={!dm.enabled || !canManage} onChange={e => quickUpdate(dm, { status: e.target.value, inStore: !["未到店", "已下班"].includes(e.target.value) })}>{dmStatuses.map(status => <option key={status}>{status}</option>)}</select><button disabled={!canManage} onClick={() => quickUpdate(dm, { enabled: !dm.enabled })}>{dm.enabled ? "停用" : "恢复"}</button></div>
     </article>)}</div>}
 
     {page === "剧本管理" && <div className="table-card catalog-table"><table><thead><tr><th>剧本</th><th>类型 / 难度</th><th>人数</th><th>时长</th><th>补位规则</th><th>合格 DM</th><th>状态</th><th/></tr></thead><tbody>{filteredScripts.map(script => {
       const qualified = skills.filter(skill => skill.scriptId === script.id && skill.willing && skill.proficiency >= script.minProficiency).length;
-      return <tr key={script.id} className={!script.enabled ? "disabled-row" : ""}><td><b>{script.name}</b><small>{script.roomRequirement}</small></td><td>{script.category}<small>{script.difficulty}</small></td><td>{script.minPlayers}–{script.maxPlayers}<small>标准 {script.standardPlayers} 人</small></td><td>{Math.floor(script.durationMinutes / 60)}h {script.durationMinutes % 60 || ""}<small>准备 {script.prepMinutes} 分钟</small></td><td>{script.allowDmFill ? `允许，最多 ${script.maxDmFill} 人` : "不允许"}</td><td><strong className={qualified === 0 ? "text-danger" : ""}>{qualified}</strong><small>熟练度 ≥ {script.minProficiency}</small></td><td><em className={script.enabled ? "available" : "busy"}>{script.enabled ? "在架" : "已下架"}</em></td><td><button onClick={() => setEditing(script)}>编辑</button><button onClick={() => quickUpdate(script, { enabled: !script.enabled })}>{script.enabled ? "下架" : "上架"}</button></td></tr>;
+      return <tr key={script.id} className={!script.enabled ? "disabled-row" : ""}><td><b>{script.name}</b><small>{script.roomRequirement}</small></td><td>{script.category}<small>{script.difficulty}</small></td><td>{script.minPlayers} 至 {script.maxPlayers}<small>标准 {script.standardPlayers} 人</small></td><td>{Math.floor(script.durationMinutes / 60)}h {script.durationMinutes % 60 || ""}<small>准备 {script.prepMinutes} 分钟</small></td><td>{script.allowDmFill ? `允许，最多 ${script.maxDmFill} 人` : "不允许"}</td><td><strong className={qualified === 0 ? "text-danger" : ""}>{qualified}</strong><small>熟练度 ≥ {script.minProficiency}</small></td><td><em className={script.enabled ? "available" : "busy"}>{script.enabled ? "在架" : "已下架"}</em></td><td><button disabled={!canManage} onClick={() => setEditing(script)}>编辑</button><button disabled={!canManage} onClick={() => quickUpdate(script, { enabled: !script.enabled })}>{script.enabled ? "下架" : "上架"}</button></td></tr>;
     })}</tbody></table></div>}
 
     {page === "房间管理" && <div className="room-grid rich-rooms">{filteredRooms.map(room => <article className={!room.enabled ? "disabled-card" : ""} key={room.id}>
       <div><span>⌂</span><em className={room.status === "空闲" ? "available" : "busy"}>{room.enabled ? room.status : "停用"}</em></div><h3>{room.name}</h3><p>容量 {room.capacity} 人</p><div className="tag-row">{room.supportedTypes.map(tag => <em key={tag}>{tag}</em>)}</div><small>{room.notes || "暂无备注"}</small>{room.needsCleaning && <div className="clean-alert">需要清理后才能使用</div>}
-      <div className="room-actions"><button onClick={() => setEditing(room)}>编辑资料</button><button onClick={() => quickUpdate(room, { needsCleaning: !room.needsCleaning, status: room.needsCleaning ? "空闲" : "清理中" })}>{room.needsCleaning ? "完成清理" : "标记清理"}</button><button onClick={() => quickUpdate(room, { enabled: !room.enabled, status: room.enabled ? "停用" : "空闲" })}>{room.enabled ? "停用" : "恢复"}</button></div>
+      <div className="room-actions"><button disabled={!canManage} onClick={() => setEditing(room)}>编辑资料</button><button disabled={!canManage} onClick={() => quickUpdate(room, { needsCleaning: !room.needsCleaning, status: room.needsCleaning ? "空闲" : "清理中" })}>{room.needsCleaning ? "完成清理" : "标记清理"}</button><button disabled={!canManage} onClick={() => quickUpdate(room, { enabled: !room.enabled, status: room.enabled ? "停用" : "空闲" })}>{room.enabled ? "停用" : "恢复"}</button></div>
     </article>)}</div>}
 
     {editing && resource === "dm" && <DmEditor value={editing === "new" ? null : editing as DmRecord} onClose={() => setEditing(null)} onSave={async entity => { await save("dm", entity); setEditing(null); notice("DM 资料已保存"); }} />}
