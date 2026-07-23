@@ -59,3 +59,25 @@ jobs:
 
       - name: Build Docker image
         run: docker build --tag jubensha-scheduler:ci .
+
+      - name: Start production container
+        run: docker run --detach --name jubensha-ci --publish 3000:3000 --env AUTH_MODE=demo --env PORT=3000 jubensha-scheduler:ci
+
+      - name: Verify container health and shared API
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/healthz > health.json; then
+              curl --fail --silent --show-error http://127.0.0.1:3000/ > home.html
+              curl --fail --silent --show-error http://127.0.0.1:3000/api/shared/snapshot > snapshot.json
+              grep --quiet '"ok":true' health.json
+              grep --quiet '"storageMode":"file"' snapshot.json
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs jubensha-ci
+          exit 1
+
+      - name: Stop production container
+        if: always()
+        run: docker rm --force jubensha-ci
