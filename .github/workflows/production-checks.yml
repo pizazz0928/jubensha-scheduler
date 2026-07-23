@@ -21,6 +21,19 @@ jobs:
     name: Test, audit and build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: scheduler_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping --host 127.0.0.1 --user root --password=ci-root-password"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -40,6 +53,8 @@ jobs:
 
       - name: Run business tests
         run: pnpm test
+        env:
+          TEST_MYSQL_URI: mysql://root:ci-root-password@127.0.0.1:3306/scheduler_test
 
       - name: Run code quality checks
         run: pnpm lint
