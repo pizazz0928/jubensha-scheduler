@@ -36,6 +36,7 @@ tsconfig.tsbuildinfo
 
 # local shared scheduler state
 /data/
+/backups/
 
 # vercel
 .vercel

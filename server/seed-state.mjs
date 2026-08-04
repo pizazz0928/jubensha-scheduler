@@ -84,10 +84,17 @@ export function createSeedState() {
     id: `skill-${index}`, dmId: row[0], scriptId: row[1], proficiency: row[2], priority: 0, willing: true,
   }));
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     version: 1,
     catalog: { dms, scripts, rooms, skills },
-    sessions,
+    sessions: sessions.map((session) => ({
+      ...session,
+      playerNames: Array.from(
+        { length: Math.max(0, session.players - session.fillers.length) },
+        (_, index) => `玩家${index + 1}`,
+      ),
+      fillers: [...session.fillers],
+    })),
     logs: [
       ["17:06", "店长 · 林野", "将 小满 安排为《兵临城下》玩家补位", "人工调整"],
       ["16:52", "前台 · 阿梨", "《青楼》开始时间调整为 18:00", "时间变更"],

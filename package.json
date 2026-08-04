@@ -13,6 +13,8 @@
     "start:cloud": "node scripts/start-cloud-run.mjs",
     "auth:hash": "node scripts/hash-password.mjs",
     "auth:secret": "node scripts/generate-session-secret.mjs",
+    "backup:export": "node scripts/export-backup.mjs",
+    "backup:restore": "node scripts/restore-backup.mjs",
     "test": "node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern work --ignore-pattern outputs --ignore-pattern .wrangler",
     "db:generate": "drizzle-kit generate"
@@ -44,7 +46,7 @@
   },
   "overrides": {
     "esbuild": "0.28.1",
-    "postcss": "8.5.22",
+    "postcss": "8.5.23",
     "sharp": "0.35.0",
     "undici": "7.28.0",
     "ws": "8.21.0"

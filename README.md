@@ -6,7 +6,7 @@
 
 - 今日调度大屏、风险提醒、场次筛选和 DM 实时状态
 - 临时开本、主 DM 推荐、快速换 DM 和玩家补位
-- 场次开始、结束、取消、时间调整、人数调整和补位退出
+- 场次开始、结束、取消、时间调整、人数调整、玩家昵称明细和补位退出
 - 自定义 DM、剧本、熟练度、房间容量、房态和支持类型
 - MySQL 云端持久化与本地文件演示模式
 - 乐观版本锁与 MySQL 行锁，避免并发重复占用
@@ -104,6 +104,13 @@ APP_USERS_JSON=[{"username":"admin","passwordHash":"生成的密码哈希","disp
 
 完整控制台操作见 [腾讯云正式上线清单](docs/TENCENT_LAUNCH.md)。
 
+## 完整文档
+
+- [安装与运行说明](docs/INSTALLATION.md)
+- [腾讯云正式上线清单](docs/TENCENT_LAUNCH.md)
+- [备份与恢复说明](docs/BACKUP_RESTORE.md)
+- [门店使用说明](docs/USER_GUIDE.md)
+
 ## 角色权限
 
 | 角色 | 场次调度 | 基础资料 | 数据可见范围 |
@@ -129,7 +136,7 @@ APP_USERS_JSON=[{"username":"admin","passwordHash":"生成的密码哈希","disp
 
 ## 数据备份
 
-正式数据存放在 MySQL 的 `scheduler_state` 表。建议在腾讯云数据库中开启自动备份，并在重大资料调整前创建手动备份。操作日志在应用状态中保留最近 200 条。
+正式数据存放在 MySQL 的 `scheduler_state` 表。管理员可以在“记录统计”中下载或恢复带 SHA256 完整性校验的备份，也可以使用 `pnpm backup:export` 和 `pnpm backup:restore <文件> --confirm`。详细步骤见 [备份与恢复说明](docs/BACKUP_RESTORE.md)。操作日志在应用状态中保留最近 200 条。
 
 ## 演示流程
 
