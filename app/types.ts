@@ -63,6 +63,7 @@ export type SessionRecord = {
   room: string;
   dm: string;
   players: number;
+  playerNames: string[];
   target: number;
   fillers: string[];
   status: SessionStatus;

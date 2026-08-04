@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createSeedState } from "./seed-state.mjs";
+import { normalizeState } from "./state-schema.mjs";
 
 function clone(value) {
   return structuredClone(value);
@@ -20,7 +21,7 @@ export async function createFileStore() {
 
   async function load() {
     try {
-      return JSON.parse(await readFile(filePath, "utf8"));
+      return normalizeState(JSON.parse(await readFile(filePath, "utf8")));
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
       const initial = createSeedState();
@@ -101,7 +102,7 @@ export async function createMysqlStore() {
     async snapshot() {
       const [rows] = await pool.execute("SELECT version, payload FROM scheduler_state WHERE id = 1");
       if (!rows[0]) throw new Error("共享数据库尚未初始化");
-      const state = JSON.parse(rows[0].payload);
+      const state = normalizeState(JSON.parse(rows[0].payload));
       state.version = Number(rows[0].version);
       return state;
     },
@@ -113,7 +114,7 @@ export async function createMysqlStore() {
         const row = rows[0];
         if (!row) throw new Error("共享数据库尚未初始化");
         if (Number(expectedVersion) !== Number(row.version)) throw conflict(Number(row.version));
-        const state = JSON.parse(row.payload);
+        const state = normalizeState(JSON.parse(row.payload));
         state.version = Number(row.version);
         await mutation(state);
         state.version += 1;

@@ -213,3 +213,22 @@ test("真实玩家到店后补位 DM 可以退出且人数保持不变", () => {
   assert.equal(session.players, playersBefore);
   assert.equal(state.catalog.dms.find(dm => dm.name === "小满").status, "空闲");
 });
+
+test("场次会保存玩家昵称并在人数减少时同步裁剪", () => {
+  const state = createSeedState();
+  const session = state.sessions.find(item => item.id === 4);
+  sharedApiInternals.updateSession(state, viewer, {
+    sessionId: session.id,
+    action: "edit",
+    players: 5,
+    playerNames: ["阿梨", "小周", "丸子", "南风", "山竹", "多余玩家"],
+  });
+  assert.deepEqual(session.playerNames, ["阿梨", "小周", "丸子", "南风", "山竹"]);
+
+  sharedApiInternals.updateSession(state, viewer, {
+    sessionId: session.id,
+    action: "edit",
+    players: 3,
+  });
+  assert.deepEqual(session.playerNames, ["阿梨", "小周", "丸子"]);
+});

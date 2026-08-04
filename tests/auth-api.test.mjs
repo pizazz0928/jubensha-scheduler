@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { hashPassword } from "../server/auth.mjs";
+import { createBackupDocument } from "../server/backup.mjs";
 import { handleSharedApi } from "../server/shared-api.mjs";
 import { createSeedState } from "../server/seed-state.mjs";
 
@@ -44,10 +45,17 @@ test("账号登录接口签发安全会话并允许读取共享数据", async ()
     displayName: "接口测试管理员",
     role: "admin",
   }]);
+  let state = createSeedState();
   const store = {
     mode: "file",
     async snapshot() {
-      return createSeedState();
+      return structuredClone(state);
+    },
+    async mutate(expectedVersion, mutation) {
+      assert.equal(Number(expectedVersion), state.version);
+      await mutation(state);
+      state.version += 1;
+      return structuredClone(state);
     },
   };
   try {
@@ -73,6 +81,23 @@ test("账号登录接口签发安全会话并允许读取共享数据", async ()
     const payload = JSON.parse(allowed.body);
     assert.equal(payload.viewer.role, "admin");
     assert.equal(payload.authMode, "password");
+
+    const exported = response();
+    await handleSharedApi(request("GET", "/api/shared/backup", undefined, { cookie }), exported, store);
+    assert.equal(exported.status, 200);
+    assert.equal(JSON.parse(exported.body).format, "jubensha-scheduler-backup");
+
+    const desired = createSeedState();
+    desired.catalog.rooms[0].notes = "由界面备份恢复";
+    const restored = response();
+    await handleSharedApi(request("POST", "/api/shared/restore", {
+      expectedVersion: state.version,
+      confirmation: "恢复全部数据",
+      backup: createBackupDocument(desired),
+    }, { cookie }), restored, store);
+    assert.equal(restored.status, 200);
+    assert.equal(state.catalog.rooms[0].notes, "由界面备份恢复");
+    assert.match(state.logs[0][2], /恢复/);
   } finally {
     for (const [name, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[name];

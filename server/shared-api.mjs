@@ -7,6 +7,7 @@ import {
   getAuthMode,
   getViewer,
 } from "./auth.mjs";
+import { applyBackupState, createBackupDocument, parseBackupDocument } from "./backup.mjs";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -89,6 +90,7 @@ const number = (value, fallback, min, max) => {
 };
 const strings = (value) => Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 30) : [];
 const text = (value, maxLength = 500) => String(value ?? "").trim().slice(0, maxLength);
+const playerNames = (value) => strings(value).map((name) => text(name, 80));
 
 function uniqueId(resource, provided) {
   const value = text(provided, 100);
@@ -229,6 +231,7 @@ function createSession(state, viewer, payload) {
     room: room.name,
     dm: text(item.dm, 80) || "待安排",
     players,
+    playerNames: playerNames(item.playerNames).slice(0, players),
     target: script.standardPlayers,
     fillers: [],
     status: text(item.status, 30) || (players < script.standardPlayers ? "缺玩家" : "准备中"),
@@ -396,9 +399,12 @@ function updateSession(state, viewer, payload) {
   session.time = nextTime;
   session.end = nextEnd;
   session.players = nextPlayers;
+  session.playerNames = Array.isArray(payload?.playerNames)
+    ? playerNames(payload.playerNames).slice(0, Math.max(0, nextPlayers - session.fillers.length))
+    : playerNames(session.playerNames).slice(0, Math.max(0, nextPlayers - session.fillers.length));
   if (session.status !== "进行中") session.status = session.dm === "待安排" ? "缺DM" : nextPlayers < session.target ? "缺玩家" : "准备中";
   session.risk = nextPlayers < session.target ? `缺 ${session.target - nextPlayers} 名玩家` : undefined;
-  addLog(state, viewer, `更新场次《${session.title}》的时间或人数`, "场次调整");
+  addLog(state, viewer, `更新场次《${session.title}》的时间、人数或玩家名单`, "场次调整");
 }
 
 function publicState(state, viewer, storeMode) {
@@ -460,9 +466,38 @@ export async function handleSharedApi(request, response, store) {
     return;
   }
   try {
+    if (request.method === "GET" && url.pathname === "/api/shared/backup") {
+      if (viewer.role !== "admin") {
+        sendJson(response, 403, { error: "只有管理员可以导出完整备份" });
+        return;
+      }
+      const state = await store.snapshot();
+      const filename = `jubensha-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      sendJson(response, 200, createBackupDocument(state), {
+        "content-disposition": `attachment; filename="${filename}"`,
+      });
+      return;
+    }
     if (request.method === "GET" && (url.pathname === "/api/shared/me" || url.pathname === "/api/shared/snapshot")) {
       const state = await store.snapshot();
       sendJson(response, 200, url.pathname.endsWith("/me") ? { viewer } : publicState(state, viewer, store.mode));
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/shared/restore") {
+      if (viewer.role !== "admin") {
+        sendJson(response, 403, { error: "只有管理员可以恢复完整备份" });
+        return;
+      }
+      const body = await readJson(request);
+      if (body.confirmation !== "恢复全部数据") {
+        sendJson(response, 400, { error: "恢复确认文字不正确" });
+        return;
+      }
+      const restored = parseBackupDocument(JSON.stringify(body.backup));
+      const state = await store.mutate(body.expectedVersion, async (draft) => {
+        applyBackupState(draft, restored, `${viewer.roleLabel} · ${viewer.displayName}`);
+      });
+      sendJson(response, 200, publicState(state, viewer, store.mode));
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/shared/catalog") {
