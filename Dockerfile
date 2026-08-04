@@ -1,4 +1,4 @@
-FROM node:22.21.1-bookworm-slim
+FROM node:22.21.1-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -10,8 +10,28 @@ RUN corepack enable \
 COPY . .
 RUN pnpm build
 
+FROM node:22.21.1-bookworm-slim AS production-dependencies
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable \
+    && corepack prepare pnpm@11.9.0 --activate \
+    && pnpm install --prod --frozen-lockfile \
+    && pnpm store prune
+
+FROM node:22.21.1-bookworm-slim AS runtime
+
+WORKDIR /app
+
+COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/scripts ./scripts
+COPY --from=build --chown=node:node /app/server ./server
+COPY --from=build --chown=node:node /app/package.json ./package.json
+
 RUN mkdir -p /data/wrangler-state /tmp/wrangler-config \
-    && chown -R node:node /app /data /tmp/wrangler-config
+    && chown -R node:node /data /tmp/wrangler-config
 
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -60,7 +60,7 @@ jobs:
         run: pnpm lint
 
       - name: Run TypeScript checks
-        run: pnpm exec tsc --noEmit
+        run: pnpm typecheck
 
       - name: Build production application
         run: pnpm build
@@ -78,6 +78,12 @@ jobs:
 
       - name: Build Docker image
         run: docker build --tag jubensha-scheduler:ci .
+
+      - name: Enforce production image size budget
+        run: |
+          image_size=$(docker image inspect jubensha-scheduler:ci --format '{{.Size}}')
+          echo "Production image size: $image_size bytes"
+          test "$image_size" -lt 1073741824
 
       - name: Start production container
         run: |
