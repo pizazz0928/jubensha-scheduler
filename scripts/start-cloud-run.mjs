@@ -14,6 +14,7 @@ const workerPort = parsePort(process.env.WORKER_PORT ?? String(port === 65535 ? 
 const host = process.env.HOST ?? "0.0.0.0";
 const stateDirectory = path.resolve(process.env.LOCAL_D1_DIR ?? path.join(projectRoot, ".wrangler", "cloud-run"));
 const configDirectory = path.resolve(process.env.XDG_CONFIG_HOME ?? path.join(projectRoot, ".wrangler", "config"));
+const maxProxyResponseBytes = 16 * 1024 * 1024;
 
 await Promise.all([mkdir(stateDirectory, { recursive: true }), mkdir(configDirectory, { recursive: true })]);
 validateAuthConfiguration();
@@ -168,7 +169,7 @@ async function proxyToWorker(request, response, internalPort) {
   });
   const responseHeaders = {};
   upstream.headers.forEach((value, name) => {
-    if (!["connection", "transfer-encoding"].includes(name.toLowerCase())) responseHeaders[name] = value;
+    if (!["connection", "transfer-encoding", "content-encoding", "content-length"].includes(name.toLowerCase())) responseHeaders[name] = value;
   });
   responseHeaders["x-content-type-options"] = "nosniff";
   responseHeaders["referrer-policy"] = "same-origin";
@@ -177,9 +178,15 @@ async function proxyToWorker(request, response, internalPort) {
   if (request.headers["x-forwarded-proto"] === "https") {
     responseHeaders["strict-transport-security"] = "max-age=31536000; includeSubDomains";
   }
+  const contentLength = Number(upstream.headers.get("content-length") ?? 0);
+  if (contentLength > maxProxyResponseBytes) throw new Error("页面响应超过代理大小限制");
+  const body = request.method === "HEAD" || !upstream.body
+    ? Buffer.alloc(0)
+    : Buffer.from(await upstream.arrayBuffer());
+  if (body.byteLength > maxProxyResponseBytes) throw new Error("页面响应超过代理大小限制");
+  responseHeaders["content-length"] = String(body.byteLength);
   response.writeHead(upstream.status, responseHeaders);
-  if (upstream.body) Readable.fromWeb(upstream.body).pipe(response);
-  else response.end();
+  response.end(body);
 }
 
 function sendJson(response, status, payload) {
