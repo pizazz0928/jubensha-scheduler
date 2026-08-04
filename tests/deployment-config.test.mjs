@@ -6,12 +6,18 @@ const root = new URL("../", import.meta.url);
 
 test("云托管容器使用动态端口、健康检查和非 root 用户", async () => {
   const dockerfile = await readFile(new URL("Dockerfile", root), "utf8");
+  assert.match(dockerfile, /AS build/);
+  assert.match(dockerfile, /AS production-dependencies/);
+  assert.match(dockerfile, /AS runtime/);
   assert.match(dockerfile, /ENV PORT=3000/);
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*\/healthz/);
   assert.match(dockerfile, /USER node/);
   assert.match(dockerfile, /LOCAL_STORE_PATH=\/data\/scheduler-state\.json/);
   assert.match(dockerfile, /pnpm install --frozen-lockfile/);
+  assert.match(dockerfile, /pnpm install --prod --frozen-lockfile/);
   assert.match(dockerfile, /RUN pnpm build/);
+  assert.match(dockerfile, /COPY --from=production-dependencies/);
+  assert.doesNotMatch(dockerfile, /COPY --from=build[^\n]*node_modules/);
   assert.doesNotMatch(dockerfile, /npm ci/);
   assert.match(dockerfile, /CMD \["node", "scripts\/start-cloud-run\.mjs"\]/);
   assert.doesNotMatch(dockerfile, /VOLUME\s+\[?"?\/data/);
