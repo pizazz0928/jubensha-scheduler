@@ -33,6 +33,10 @@ test("云启动脚本读取 PORT 并将终止信号传给子进程", async () =>
   assert.match(script, /storage health check failed/);
   assert.match(script, /sendJson\(response, 503/);
   assert.match(script, /content-security-policy/);
+  assert.match(script, /Buffer\.from\(await upstream\.arrayBuffer\(\)\)/);
+  assert.match(script, /responseHeaders\["content-length"\] = String\(body\.byteLength\)/);
+  assert.match(script, /"content-encoding"/);
+  assert.doesNotMatch(script, /Readable\.fromWeb\(upstream\.body\)\.pipe\(response\)/);
 });
 
 test("正式环境示例强制 MySQL 和普通账号密码登录", async () => {
