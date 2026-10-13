@@ -68,6 +68,12 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
 
+      # Keep the production audit blocking. The full audit also reports build
+      # tooling, including the unpatched braces advisory documented below.
+      - name: Report security advisories for all dependencies
+        continue-on-error: true
+        run: pnpm audit --audit-level high
+
   container:
     name: Build CloudBase container
     runs-on: ubuntu-latest
